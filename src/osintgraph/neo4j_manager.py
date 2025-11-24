@@ -28,8 +28,7 @@ class Neo4jManager:
         self.credential = get_credential_manager()
 
         self.driver = None
-        self._load_or_prompt_credentials()        
-        self._connect_to_neo4j()
+        self._establish_connection()
             
 
     def _load_or_prompt_credentials(self):
@@ -50,7 +49,20 @@ class Neo4jManager:
         self.URI = uri
         self.AUTH = (username, password)
 
-    def _connect_to_neo4j(self):
+    def _establish_connection(self):
+        """Attempts to connect to Neo4j in a loop until successful."""
+        while True:
+            self._load_or_prompt_credentials()
+            if self._connect_to_neo4j():
+                break
+
+            self.logger.warning("Connection to Neo4j failed. Please re-enter your credentials.")
+            self.credential.set("NEO4J_URI", "")
+            self.credential.set("NEO4J_USERNAME", "")
+            self.credential.set("NEO4J_PASSWORD", "")
+
+    def _connect_to_neo4j(self) -> bool:
+        """Attempts a single connection to Neo4j."""
         try:
             self.driver = GraphDatabase.driver(self.URI, auth=self.AUTH)
             self.driver.verify_connectivity()
@@ -60,17 +72,10 @@ class Neo4jManager:
             self.credential.set("NEO4J_URI", self.URI)
             self.credential.set("NEO4J_USERNAME", self.AUTH[0])  # username
             self.credential.set("NEO4J_PASSWORD", self.AUTH[1])  # password
+            return True
         except (ServiceUnavailable, Exception) as e:
             self.logger.error(f"Failed to connect to Neo4j: {e}")
-            self._handle_failed_connection()
-
-    def _handle_failed_connection(self):
-        self.logger.warning("Connection to Neo4j failed. Please re-enter your credentials.")
-        self.credential.set("NEO4J_URI", "")
-        self.credential.set("NEO4J_USERNAME", "")
-        self.credential.set("NEO4J_PASSWORD", "")
-        self._load_or_prompt_credentials()
-        self._connect_to_neo4j()
+            return False
     
     # Function to get session
     @contextmanager
